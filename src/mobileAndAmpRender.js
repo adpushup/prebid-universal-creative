@@ -2,6 +2,7 @@ import { getCreativeCommentMarkup, triggerPixel, createTrackPixelHtml, loadScrip
 import { isSafeFrame, isMobileApp } from './environment';
 import { insertElement } from './domHelper';
 import { writeAdHtml } from './postscribeRender';
+import { transformAdpushupTargetingData, sendApBidWonFeedback, resizeGoogleAdIframe } from './adpushupUtils'
 
 const DEFAULT_CACHE_HOST = 'prebid.adnxs.com';
 const DEFAULT_CACHE_PATH = '/pbc/v1/cache';
@@ -16,7 +17,7 @@ const DEFAULT_CACHE_PATH = '/pbc/v1/cache';
  * @param {Bool} isMobileApp flag to detect mobile app
  */
 export function renderAmpOrMobileAd(dataObject) {
-  const targetingData = transformAuctionTargetingData(dataObject);
+  const targetingData = dataObject.isAPCreative ? transformAdpushupTargetingData(dataObject) : transformAuctionTargetingData(dataObject);
   let { cacheHost, cachePath, uuid, size, hbPb } = targetingData;
   uuid = uuid || '';
   // For MoPub, creative is stored in localStorage via SDK.
@@ -28,8 +29,12 @@ export function renderAmpOrMobileAd(dataObject) {
   } else {
     let adUrl = `${getCacheEndpoint(cacheHost, cachePath)}?uuid=${uuid}`;
     //register creative right away to not miss initial geom-update
-    updateIframe(size);
-    sendRequest(adUrl, responseCallback(isMobileApp(targetingData.env), hbPb));
+    if(dataObject.isAPCreative){
+      resizeGoogleAdIframe(size);
+    } else {
+      updateIframe(size);
+    }
+    sendRequest(adUrl, responseCallback(isMobileApp(targetingData.env), hbPb, targetingData));
   }
 }
 
@@ -91,10 +96,10 @@ function resizeIframe(width, height) {
  * @param {string} cachePath Cache Endpoint path
  */
 function getCacheEndpoint(cacheHost, cachePath) {
-  let host = (typeof cacheHost === 'undefined' || cacheHost === "") ? DEFAULT_CACHE_HOST : cacheHost;
+  let host = (typeof cacheHost === 'undefined' || cacheHost === "") ? DEFAULT_CACHE_HOST : cacheHost.replace('https://', '');
   let path = (typeof cachePath === 'undefined' || cachePath === "") ? DEFAULT_CACHE_PATH : cachePath;
-
-  return `https://${host}${path}`;
+  
+  return `https://${host}${path}`;;
 }
 
 
@@ -104,13 +109,17 @@ function getCacheEndpoint(cacheHost, cachePath) {
  * @param {string} hbPb final price of the winning bid
  * @returns {function} a callback function that parses response
  */
-function responseCallback(isMobileApp, hbPb) {
+function responseCallback(isMobileApp, hbPb, targetingData) {
   return function (response) {
     let bidObject = parseResponse(response);
     let auctionPrice = bidObject.price || hbPb;
     let ad = getCreativeCommentMarkup(bidObject);
     let width = (bidObject.width) ? bidObject.width : bidObject.w;
     let height = (bidObject.height) ? bidObject.height : bidObject.h;
+
+    if(targetingData && targetingData.isAPCreative) {
+      sendApBidWonFeedback(targetingData, bidObject)
+    }
 
     // When Prebid Universal Creative reads from Prebid Cache, we need to have it check for the existence of the wurl parameter. If it exists, hit it.
     if (bidObject.wurl) {

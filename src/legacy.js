@@ -10,16 +10,16 @@
 * - Outstream Video
 * - All safeFrame creatives
 */
-
 import { transformAuctionTargetingData } from './utils';
 import { renderBannerOrDisplayAd } from './renderingManager';
 import { renderAmpOrMobileAd } from './mobileAndAmpRender';
 import { isMobileApp, isAmp } from './environment';
+import { transformAdpushupTargetingData } from './adpushupUtils';
 
 window.ucTag = (window.ucTag || {});
 
 window.ucTag.renderAd = (doc, dataObject) => {
-  const targetingData = transformAuctionTargetingData(dataObject);
+  const targetingData = dataObject.isAPCreative ? transformAdpushupTargetingData(dataObject) : transformAuctionTargetingData(dataObject);
 
   if (isMobileApp(targetingData.env) || isAmp(targetingData.uuid, window)) {
     renderAmpOrMobileAd(dataObject);
